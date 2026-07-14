@@ -37,6 +37,7 @@ async function resolveDamageToCreature(game, target, targetSide, damage, sourceN
   }
 
   target.currentHp -= damage;
+  game.showCreatureDamage(target, damage);
   game.log(`${sourceName} hits ${target.name} for ${damage}.`);
   return damage;
 }

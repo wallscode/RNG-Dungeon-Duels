@@ -308,6 +308,8 @@ export function render(game) {
     cardEl.dataset.handIndex = String(i);
     if (s.phase === 'player-turn') {
       cardEl.classList.add(card.cost <= s.player.mana ? 'playable' : 'unplayable');
+    } else if (s.phase === 'ai-turn') {
+      cardEl.classList.add('unplayable'); // nothing is playable on the opponent's turn
     }
     hand.appendChild(cardEl);
   });
@@ -517,6 +519,48 @@ export function clearActiveCard() {
   const pin = document.getElementById('active-card-pin');
   pin.classList.remove('visible', 'opp-cast');
   pin.innerHTML = '';
+}
+
+// ── Damage floats & death animation ──────────────────────────────────────────
+
+// Red "−N" that floats up-and-right from an anchor element.
+function floatDamageAt(anchorEl, amount) {
+  if (!anchorEl || amount <= 0) return;
+  const rect = anchorEl.getBoundingClientRect();
+  const f = el('div', 'float-dmg', `−${amount}`);
+  f.style.left = `${rect.right - 8}px`;
+  f.style.top = `${rect.top - 4}px`;
+  document.body.appendChild(f);
+  setTimeout(() => f.remove(), 1400);
+}
+
+export function floatHeroDamage(side, amount) {
+  const id = side === 'player' ? 'player-hp-value' : 'opp-hp-value';
+  floatDamageAt(document.getElementById(id), amount);
+}
+
+export function floatCreatureDamage(instanceId, amount) {
+  floatDamageAt(document.querySelector(`[data-instance-id="${instanceId}"]`), amount);
+}
+
+// Plays a death animation on a fixed-position clone so the board re-render
+// can't cut it short. Call while the creature's element is still in the DOM.
+export function animateDeath(instanceId) {
+  const src = document.querySelector(`[data-instance-id="${instanceId}"]`);
+  if (!src) return;
+  const rect = src.getBoundingClientRect();
+  const clone = src.cloneNode(true);
+  clone.classList.add('dying');
+  clone.classList.remove('selected', 'can-attack', 'valid-target');
+  clone.style.position = 'fixed';
+  clone.style.left = `${rect.left}px`;
+  clone.style.top = `${rect.top}px`;
+  clone.style.width = `${rect.width}px`;
+  clone.style.height = `${rect.height}px`;
+  clone.style.margin = '0';
+  document.body.appendChild(clone);
+  src.style.visibility = 'hidden';
+  setTimeout(() => clone.remove(), 750);
 }
 
 // ── Attack arcs ──────────────────────────────────────────────────────────────

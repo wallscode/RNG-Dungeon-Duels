@@ -267,6 +267,8 @@ export class Game {
     const oppBefore = s.opponent.hp;
     s.player.hp -= roll.total;
     s.opponent.hp -= roll.total;
+    ui.floatHeroDamage('player', roll.total);
+    ui.floatHeroDamage('opponent', roll.total);
     this.log(`The Collapse deals ${roll.total} to both heroes.`);
     ui.render(this);
 
@@ -328,6 +330,7 @@ export class Game {
   dealToHero(side, dmg, { source = '' } = {}) {
     if (dmg <= 0) return;
     this.state[side].hp -= dmg;
+    ui.floatHeroDamage(side, dmg);
     ui.render(this);
     this.checkGameOver();
   }
@@ -337,7 +340,13 @@ export class Game {
   dealToCreature(creature, side, dmg, { source = '' } = {}) {
     if (dmg <= 0) return;
     creature.currentHp -= dmg;
+    ui.floatCreatureDamage(creature.instanceId, dmg);
     ui.render(this);
+  }
+
+  // Float hook for combat.js (which routes all UI through the game object).
+  showCreatureDamage(creature, dmg) {
+    ui.floatCreatureDamage(creature.instanceId, dmg);
   }
 
   healHero(side, amount, source = '') {
@@ -361,6 +370,7 @@ export class Game {
       if (hero.deck.length === 0) {
         hero.fatigue += 1;
         hero.hp -= hero.fatigue;
+        ui.floatHeroDamage(who, hero.fatigue);
         this.log(`${who === 'player' ? 'Your deck is empty — you take' : 'Opponent’s deck is empty — it takes'} ${hero.fatigue} fatigue damage!`);
         ui.render(this);
         if (this.checkGameOver()) return;
@@ -416,9 +426,11 @@ export class Game {
       }
       if (!died) break;
 
+      ui.animateDeath(died.instanceId); // while its element is still in the DOM
       s[side].board = s[side].board.filter((c) => c !== died);
       s[side].discard.push(died);
       this.log(`${died.name} is destroyed.`);
+      await sleep(400); // let the death read before the board reflows
 
       if (died.keywords.some((k) => k.name === 'Volatile') && s.phase !== 'game-over') {
         const roll = await this.roll(side, {
@@ -948,15 +960,16 @@ const SORCERY_HANDLERS = {
     const targets = () => game.state[enemy].board.filter((c) => c.currentHp > 0);
     if (targets().length === 0) { game.log(`${card.name} arcs into nothing.`); return; }
     const { dmg } = await damageSorceryRoll(game, who, card, '2d6', 'Split randomly among enemy creatures');
-    const hits = new Map();
+    const hits = new Map(); // creature instance -> damage taken
     for (let i = 0; i < dmg; i++) {
       const live = targets();
       if (live.length === 0) break;
       const t = live[Math.floor(Math.random() * live.length)];
       t.currentHp -= 1;
-      hits.set(t.name, (hits.get(t.name) || 0) + 1);
+      hits.set(t, (hits.get(t) || 0) + 1);
     }
-    game.log(`Chain Lightning: ${[...hits].map(([n, d]) => `${n} takes ${d}`).join(', ')}.`);
+    for (const [t, d] of hits) ui.floatCreatureDamage(t.instanceId, d);
+    game.log(`Chain Lightning: ${[...hits].map(([t, d]) => `${t.name} takes ${d}`).join(', ')}.`);
     ui.render(game);
   },
 
@@ -1133,13 +1146,15 @@ const SORCERY_HANDLERS = {
         heroHits += 1;
       } else {
         t.currentHp -= 1;
-        hits.set(t.name, (hits.get(t.name) || 0) + 1);
+        hits.set(t, (hits.get(t) || 0) + 1);
       }
     }
+    for (const [t, d] of hits) ui.floatCreatureDamage(t.instanceId, d);
     if (heroHits > 0) {
       game.state[enemy].hp -= heroHits;
+      ui.floatHeroDamage(enemy, heroHits);
     }
-    const parts = [...hits].map(([n, d]) => `${n} takes ${d}`);
+    const parts = [...hits].map(([t, d]) => `${t.name} takes ${d}`);
     if (heroHits > 0) parts.push(`hero takes ${heroHits}`);
     game.log(`Inferno! ${parts.join(', ')}.`);
     ui.render(game);
