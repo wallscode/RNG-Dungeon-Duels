@@ -3,7 +3,7 @@
 
 import { CARDS, RECRUIT_TOKEN } from './cards.js';
 import { dealDeck } from './deckbuilder.js';
-import { rollDice, rollFirstPlayer, rollPersonality } from './dice.js';
+import { rollDice, rollFirstPlayer, rollPersonality, parseNotation } from './dice.js';
 import { resolveCombat } from './combat.js';
 import {
   applyOnEnterEffects, applyStartOfTurnEffects,
@@ -51,6 +51,24 @@ function createCreatureInstance(cardDef) {
     noAttackThisTurn: false,
   };
 }
+
+const TURN_FLAVOR = {
+  Berserker: [
+    'The Berserker snarls — it wants your blood.',
+    'The Berserker charges in headlong.',
+    'The Berserker ignores your creatures. It’s coming for YOU.',
+  ],
+  Tactician: [
+    'The Tactician studies the board coldly.',
+    'The Tactician calculates the perfect trade.',
+    'The Tactician is playing the long game.',
+  ],
+  Gambler: [
+    'The Gambler grins and shakes the dice.',
+    'The Gambler bets it all on this turn.',
+    'The Gambler laughs — luck is a strategy.',
+  ],
+};
 
 const PERSONALITY_COPY = {
   Berserker: {
@@ -203,7 +221,8 @@ export class Game {
       setTimeout(() => { this.endTurnLocked = false; ui.render(this); }, END_TURN_LOCK_MS);
       ui.render(this);
     } else {
-      this.log(`The ${s.opponent.personality} takes its turn…`);
+      const flavor = TURN_FLAVOR[s.opponent.personality];
+      this.log(flavor[Math.floor(Math.random() * flavor.length)]);
       // Make the handoff unmistakable even when the AI has nothing to play:
       // banner + a minimum turn duration before control returns.
       ui.banner('Opponent’s Turn', 'opp-turn', 1400);
@@ -298,7 +317,7 @@ export class Game {
   async roll(who, opts) {
     const isAI = who === 'opponent';
     const luckyCreature = opts.lucky || null;
-    const result = await rollDice({
+    let result = await rollDice({
       ...opts,
       isAI,
       reroll: isAI ? null : {
@@ -312,6 +331,21 @@ export class Game {
         },
       },
     });
+
+    // AI Focus rerolls (damage rolls only — opts.aiRerollable). Each
+    // personality's spending pattern is a deliberate, visible tell.
+    if (isAI && opts.aiRerollable && this.ai && !result.isCrit
+        && opts.allowReroll !== false && !opts.isCollapse) {
+      const p = parseNotation(opts.notation);
+      const maxPossible = p ? p.count * p.sides : 0;
+      const hero = this.state.opponent;
+      if (this.ai.shouldReroll(result.total, maxPossible, hero.focus)) {
+        hero.focus -= 1;
+        this.log(`The ${hero.personality} spends 1 Focus to reroll the ${result.total}!`);
+        ui.render(this);
+        result = await rollDice({ ...opts, isAI: true, reroll: null });
+      }
+    }
     return result;
   }
 
@@ -864,7 +898,7 @@ export class Game {
 function enemyOf(who) { return who === 'player' ? 'opponent' : 'player'; }
 
 async function damageSorceryRoll(game, who, card, notation, context) {
-  const roll = await game.roll(who, { notation, label: `${card.name}!`, context });
+  const roll = await game.roll(who, { notation, label: `${card.name}!`, context, aiRerollable: true });
   let dmg = roll.total;
   if (roll.isCrit) {
     dmg *= 2;

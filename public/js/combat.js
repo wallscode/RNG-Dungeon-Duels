@@ -153,6 +153,7 @@ async function resolveSwing(game, opts) {
       label: isRetaliation ? `${attacker.name} retaliates!` : `${attacker.name} attacks!`,
       context: `vs ${targetName}`,
       allowReroll: !isRetaliation,
+      aiRerollable: !isRetaliation,
       lucky: luckyAvailable ? attacker : null,
     });
 

@@ -4,9 +4,9 @@
 import { parseNotation } from './dice.js';
 
 export const PERSONALITIES = {
-  Berserker: { aggression: 1.4, gambleBoldness: 1.2, focusThreshold: 1.5, facePriority: 1.5, noise: 0 },
-  Tactician: { aggression: 0.9, gambleBoldness: 0.7, focusThreshold: 2.5, facePriority: 0.8, noise: 0 },
-  Gambler:   { aggression: 1.1, gambleBoldness: 1.8, focusThreshold: 1.0, facePriority: 1.0, noise: 0.25 },
+  Berserker: { aggression: 1.4, gambleBoldness: 1.2, focusThreshold: 1.5, facePriority: 2.2, noise: 0 },
+  Tactician: { aggression: 0.9, gambleBoldness: 0.7, focusThreshold: 2.5, facePriority: 0.55, noise: 0 },
+  Gambler:   { aggression: 1.1, gambleBoldness: 1.8, focusThreshold: 1.0, facePriority: 1.0, noise: 0.35 },
 };
 
 const PAUSE_BETWEEN_PLAYS_MS = 1600;
@@ -83,13 +83,20 @@ export class AI {
       if (state.opponent.board.filter((c) => c.currentHp > 0).length >= 6) return 0;
       const ev = expectedDamage(card.atk);
       const survivalScore = card.hp / (card.hp + 3);
-      return ev * survivalScore * this.p.aggression * (1 + Math.random() * this.p.noise);
+      let score = ev * survivalScore * this.p.aggression * (1 + Math.random() * this.p.noise);
+      // Personality flavour: Berserker rushes out cheap threats; Tactician
+      // values keyword toolbox creatures.
+      if (this.name === 'Berserker') score *= 1 + Math.max(0, 7 - card.cost) * 0.06;
+      if (this.name === 'Tactician') score *= 1 + card.keywords.length * 0.18;
+      return score;
     }
     let score = this._scoreSorcery(card, state) ?? 1.0;
     if (this.p.noise > 0) score *= 1 + (Math.random() - 0.5) * this.p.noise;
     return score;
   }
 
+  // Cards whose effect would be a no-op (or a guaranteed fizzle) score 0 so
+  // the AI never wastes them — e.g. Hex with no enemy creatures on the field.
   _scoreSorcery(card, state) {
     const { aggression, gambleBoldness } = this.p;
     const me = state.opponent;
@@ -98,27 +105,29 @@ export class AI {
 
     switch (card.id) {
       case 'S001': return 1.5 * aggression;
-      case 'S002': return me.focus < 4 ? 2.0 : 0.5;
+      case 'S002': return me.focus >= 5 ? 0 : me.focus < 4 ? 2.0 : 0.5;
       case 'S003': return 1.2 * (gambleBoldness > 1 ? 1.3 : 1.0);
-      case 'S004': return enemyBoard.length > 0 ? 1.5 : 0.2;
+      case 'S004': return enemyBoard.length > 0 ? 1.5 : 0;
       case 'S005': return 2.0 * aggression;
-      case 'S006': return me.hp < 15 ? 2.5 : 0.8;
+      case 'S006': return me.hp >= 25 ? 0 : me.hp < 15 ? 2.5 : 0.8;
       case 'S007': return me.hand.length < 4 ? 2.0 : 0.5;
-      case 'S008': return myBoard.length > 0 ? 1.5 * aggression : 0.2;
-      case 'S009': return enemyBoard.length >= 2 ? 2.5 * aggression : 0.5;
-      case 'S010': return myBoard.length > 0 ? gambleBoldness * 2 : 0.2;
-      case 'S011': return myBoard.length > 1 ? 2.0 : 0.5;
+      case 'S008': return myBoard.length > 0 ? 1.5 * aggression : 0;
+      case 'S009': return enemyBoard.length >= 2 ? 2.5 * aggression
+        : enemyBoard.length === 1 ? 0.5 : 0;
+      case 'S010': return myBoard.length > 0 ? gambleBoldness * 2 : 0;
+      case 'S011': return myBoard.length > 1 ? 2.0 : myBoard.length === 1 ? 0.5 : 0;
       case 'S012': return 1.5;
       case 'S013': return 2.5 * aggression;
-      case 'S014': return enemyBoard.length > 1 ? 2.5 * aggression : 0.8;
-      case 'S015': return gambleBoldness * 1.5;
-      case 'S016': return me.hp < 15 ? 3.0 : 1.0;
+      case 'S014': return enemyBoard.length > 1 ? 2.5 * aggression
+        : enemyBoard.length === 1 ? 0.8 : 0;
+      case 'S015': return enemyBoard.length > 0 ? gambleBoldness * 1.5 : 0;
+      case 'S016': return me.hp >= 25 ? 0.8 : me.hp < 15 ? 3.0 : 1.0; // still draws
       case 'S017': return 3.0 * aggression;
-      case 'S018': return gambleBoldness * 1.5;
+      case 'S018': return enemyBoard.length + myBoard.length > 0 ? gambleBoldness * 1.5 : 0;
       case 'S019': return gambleBoldness * 3.0;
       case 'S020': return enemyBoard.length >= 2 ? 4.0 * aggression : 1.5;
       case 'S021': return 3.5 * aggression;
-      case 'S022': return myBoard.length < 4 ? 2.0 : 0.5;
+      case 'S022': return myBoard.length >= 6 ? 0 : myBoard.length < 4 ? 2.0 : 0.5;
       case 'S023': return 4.0 * aggression;
       case 'S024': return gambleBoldness * 2.5;
       default: return null;
@@ -141,12 +150,13 @@ export class AI {
     const lethality = state.player.hp <= ev * 1.5 ? 2.0 : 1.0;
     options.push({ target: 'hero', score: ev * this.p.facePriority * lethality });
 
-    // Creature trades.
+    // Creature trades. The Tactician prizes clean kills far more highly.
+    const killWeight = this.name === 'Tactician' ? 0.55 : 0.3;
     for (const c of enemyBoard) {
       const retaliation = expectedDamage(c.currentAtk || c.atk);
       const tradePenalty = this.p.aggression < 1 ? 1.2 : 0.7;
       const tradeValue = ev - retaliation * tradePenalty;
-      const killBonus = c.currentHp <= ev ? c.currentHp * 0.3 : 0;
+      const killBonus = c.currentHp <= ev ? c.currentHp * killWeight : 0;
       options.push({ target: c, score: tradeValue + killBonus });
     }
 
@@ -184,12 +194,16 @@ export class AI {
     ));
   }
 
-  // Focus-reroll decision. NOTE: defined per spec but not currently wired into
-  // dice.js — AI rolls always pass allowReroll: false.
-  shouldReroll(rollTotal, maxPossible, stakes) {
+  // Focus-reroll decision for damage rolls (wired via Game.roll). Each
+  // personality spends Focus very differently — the most visible tell:
+  //   Berserker — rerolls anything under ~2/3 of max the moment it can
+  //   Tactician — hoards Focus; only rerolls truly awful rolls with 2+ banked
+  //   Gambler   — rerolls almost any non-great roll on a whim
+  shouldReroll(rollTotal, maxPossible, focus) {
+    if (focus < 1 || maxPossible <= 0) return false;
     const quality = rollTotal / maxPossible;
-    if (this.name === 'Tactician') return stakes === 'critical' && quality < 0.4;
-    if (this.name === 'Gambler') return Math.random() < 1 / this.p.focusThreshold;
-    return quality < 1 / this.p.focusThreshold; // Berserker: rerolls misses readily
+    if (this.name === 'Tactician') return focus >= 2 && quality < 0.35;
+    if (this.name === 'Gambler') return quality < 0.9 && Math.random() < 1 / this.p.focusThreshold;
+    return quality < 1 / this.p.focusThreshold; // Berserker: < 0.67
   }
 }
