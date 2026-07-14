@@ -3,7 +3,7 @@
 // Placeholder art: every <img> falls back to a styled CSS placeholder when the
 // .webp asset is missing, so the game is fully playable before art exists.
 
-import { KEYWORD_TEXT, TIER1_KEYWORDS } from './keywords.js';
+import { KEYWORD_TEXT } from './keywords.js';
 
 const HP_MAX = 25;
 const MANA_MAX = 7;
@@ -78,16 +78,6 @@ export function buildBoard(root) {
   board.appendChild(playerZone);
 
   root.appendChild(board);
-
-  // Keyword legend strip (Tier 1).
-  const legend = el('div', '');
-  legend.id = 'keyword-legend';
-  for (const k of TIER1_KEYWORDS) {
-    const chip = el('span', 'legend-chip', k);
-    chip.title = KEYWORD_TEXT[k];
-    legend.appendChild(chip);
-  }
-  root.appendChild(legend);
 
   // Fixed overlays.
   const collapseInd = el('div', '');

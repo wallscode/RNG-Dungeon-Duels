@@ -21,8 +21,10 @@
   --radius-die:         12px;
   --radius-modal:       12px;
 
-  --card-w:             clamp(120px, 14vw, 250px);
-  --card-h:             clamp(168px, 19.6vw, 350px);
+  /* Scales with BOTH axes so large monitors get genuinely larger cards
+     (capped by viewport height so rows always fit without scrolling). */
+  --card-w:             clamp(150px, min(13.5vw, 24vh), 420px);
+  --card-h:             calc(var(--card-w) * 1.4);   /* 5:7 aspect ratio */
 
   --z-modal:            900;
   --z-dice-stage:       1000;
@@ -143,7 +145,7 @@ button { font-family: inherit; cursor: pointer; }
 
 .stat-bar-track {
   width: 14px;
-  height: clamp(80px, 22vh, 220px);
+  height: clamp(80px, 26vh, 340px);
   background: #00000066;
   border: 1px solid var(--color-border);
   border-radius: 7px;
@@ -180,8 +182,8 @@ button { font-family: inherit; cursor: pointer; }
 
 .portrait {
   position: relative;
-  width: clamp(52px, 6vw, 84px);
-  height: clamp(52px, 6vw, 84px);
+  width: clamp(52px, 9vh, 130px);
+  height: clamp(52px, 9vh, 130px);
   border-radius: 50%;
   border: 2px solid var(--color-accent);
   background: var(--color-surface);
@@ -260,13 +262,13 @@ button { font-family: inherit; cursor: pointer; }
   top: 4px;
   left: 4px;
   z-index: 3;
-  width: 22px;
-  height: 22px;
+  width: clamp(22px, 1.5vw, 36px);
+  height: clamp(22px, 1.5vw, 36px);
   border-radius: 50%;
   background: var(--color-mana);
   color: #fff;
   font-weight: 700;
-  font-size: 13px;
+  font-size: clamp(13px, 0.9vw, 21px);
   display: grid;
   place-items: center;
   box-shadow: 0 1px 3px #000a;
@@ -303,7 +305,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 .card-art-initials {
-  font-size: clamp(16px, 1.8vw, 26px);
+  font-size: clamp(16px, 1.8vw, 38px);
   font-weight: 800;
   letter-spacing: 0.05em;
   color: var(--color-text-muted);
@@ -316,7 +318,7 @@ button { font-family: inherit; cursor: pointer; }
   z-index: 3;
   margin-top: auto; /* pushes the whole text block to the card's bottom */
   background: rgba(18, 11, 5, 0.68);
-  font-size: clamp(9px, 0.8vw, 13px);
+  font-size: clamp(9px, 0.85vw, 19px);
   font-weight: 700;
   text-align: center;
   padding: 2px 4px;
@@ -338,7 +340,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 .keyword-chip {
-  font-size: clamp(7px, 0.55vw, 9px);
+  font-size: clamp(7px, 0.6vw, 13px);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 3px;
@@ -351,7 +353,7 @@ button { font-family: inherit; cursor: pointer; }
   position: relative;
   z-index: 3;
   background: rgba(18, 11, 5, 0.68);
-  font-size: clamp(7px, 0.62vw, 10px);
+  font-size: clamp(7px, 0.68vw, 15px);
   color: #e8e0d4;
   padding: 2px 5px;
   line-height: 1.25;
@@ -377,7 +379,7 @@ button { font-family: inherit; cursor: pointer; }
   justify-content: space-between;
   padding: 2px 5px 4px;
   font-weight: 800;
-  font-size: clamp(10px, 0.9vw, 14px);
+  font-size: clamp(10px, 0.95vw, 21px);
   text-shadow: 0 1px 2px #000;
 }
 
@@ -434,8 +436,8 @@ button { font-family: inherit; cursor: pointer; }
 /* Card back (opponent hand) */
 
 .card-back {
-  width: clamp(26px, 2.6vw, 44px);
-  height: clamp(36px, 3.6vw, 62px);
+  width: clamp(26px, 4.5vh, 66px);
+  height: clamp(36px, 6.3vh, 92px);
   background: linear-gradient(140deg, #3d2b1a, #241708);
   border: 1px solid var(--color-accent);
   display: grid;
@@ -705,6 +707,8 @@ button { font-family: inherit; cursor: pointer; }
 #banner.collapse { color: #ff3820; }
 #banner.victory { color: var(--color-crit); }
 #banner.defeat { color: #999; }
+#banner.your-turn { color: var(--color-focus); }
+#banner.opp-turn { color: #e05020; }
 
 .crit-burst {
   position: fixed;
@@ -966,30 +970,6 @@ button { font-family: inherit; cursor: pointer; }
 
 #game-log.visible { opacity: 1; }
 
-#keyword-legend {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 640;
-  display: flex;
-  gap: 4px;
-  padding: 2px 8px;
-  background: #00000066;
-  border-radius: 6px 6px 0 0;
-}
-
-.legend-chip {
-  font-size: 9px;
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
-  border-radius: 3px;
-  padding: 0 4px;
-  cursor: help;
-}
-
-.legend-chip:hover { color: var(--color-focus); border-color: var(--color-focus); }
-
 /* ── Active-card pin ───────────────────────────────────────────────────────── */
 
 #active-card-pin {
@@ -1111,6 +1091,42 @@ button { font-family: inherit; cursor: pointer; }
 .begin-duel-btn:hover { transform: scale(1.06); }
 
 .intro-footer { font-size: 12px; color: var(--color-text-muted); font-style: italic; }
+
+/* ── Large monitors (2K/4K): scale up the chrome, not just the cards ───────── */
+
+@media (min-width: 1800px) {
+  .die { width: 84px; height: 84px; font-size: 38px; }
+  #dice-stage { min-width: 640px; gap: 14px; padding: 26px 40px; }
+  .dice-label { font-size: 26px; }
+  .dice-context { font-size: 17px; }
+  .dice-result { font-size: 22px; }
+  .dice-btn { font-size: 17px; padding: 10px 26px; }
+
+  #log-scroll { width: 340px; max-height: 30vh; font-size: 13px; }
+  #game-log { font-size: 15px; }
+  .toolbar-stat, .toolbar-btn { font-size: 16px; padding: 6px 12px; }
+  #collapse-indicator, #phase-indicator { font-size: 16px; padding: 6px 14px; }
+  #attack-prompt, #sorcery-prompt { font-size: 18px; padding: 12px 22px 16px; }
+
+  .stat-bar-track { width: 20px; }
+  .stat-bar-value { font-size: 20px; }
+  .stat-bar-label { font-size: 13px; }
+  .portrait-name { font-size: 13px; }
+  .focus-pip { font-size: 20px; }
+  .focus-label { font-size: 13px; }
+  .end-turn-btn { font-size: 19px; padding: 14px 28px; }
+  .pin-label { font-size: 15px; }
+
+  .zone { grid-template-columns: 80px 1fr 80px; }
+
+  .intro-inner { max-width: 1240px; }
+  .intro-rule-heading { font-size: 18px; }
+  .intro-rule-body { font-size: 15px; }
+  .intro-rule-icon { font-size: 30px; }
+  .intro-tips { font-size: 15px; }
+  .modal-panel { max-width: min(720px, 92vw); }
+  .reveal-summary, .reveal-tip { font-size: 16px; max-width: 540px; }
+}
 
 /* ── Keyframes ─────────────────────────────────────────────────────────────── */
 

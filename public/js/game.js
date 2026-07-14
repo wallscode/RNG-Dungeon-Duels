@@ -27,6 +27,8 @@ const AI_HANG_MS = 120000;
 
 const CANCELLED = Symbol('sorcery-cancelled');
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 let instanceCounter = 0;
 
 function createCreatureInstance(cardDef) {
@@ -196,11 +198,16 @@ export class Game {
 
     if (who === 'player') {
       this.log('Your turn.');
+      ui.banner('Your Turn', 'your-turn', 1000);
       this.endTurnLocked = true;
       setTimeout(() => { this.endTurnLocked = false; ui.render(this); }, END_TURN_LOCK_MS);
       ui.render(this);
     } else {
       this.log(`The ${s.opponent.personality} takes its turn…`);
+      // Make the handoff unmistakable even when the AI has nothing to play:
+      // banner + a minimum turn duration before control returns.
+      ui.banner('Opponent’s Turn', 'opp-turn', 1400);
+      await sleep(1500);
       this._aiWatchdog = setTimeout(() => {
         document.getElementById('recover-btn').hidden = false;
       }, AI_HANG_MS);
@@ -212,6 +219,8 @@ export class Game {
         if (btn) btn.hidden = true;
       }
       if (this.state.phase === 'game-over') return;
+      this.log('Opponent ends its turn.');
+      await sleep(700);
       this._endOfTurnCleanup('opponent');
       await this._startTurn('player');
     }
@@ -819,7 +828,7 @@ async function dealSorceryDamage(game, who, card, target, dmg) {
   const enemy = enemyOf(who);
   if (target === 'hero') {
     game.dealToHero(enemy, dmg, { source: card.name});
-    game.log(`${card.name} hits the ${enemy === 'opponent' ? 'enemy' : 'your'} hero for ${dmg}.`);
+    game.log(`${card.name} hits ${enemy === 'opponent' ? 'the enemy' : 'your'} hero for ${dmg}.`);
   } else {
     game.dealToCreature(target, enemy, dmg, { source: card.name});
     game.log(`${card.name} hits ${target.name} for ${dmg}.`);
