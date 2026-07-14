@@ -148,8 +148,8 @@ export class Game {
 
     // Opening hands: first player 5, second player 6.
     const second = first === 'player' ? 'opponent' : 'player';
-    this._drawCards(first, 5, { silent: true });
-    this._drawCards(second, 6, { silent: true });
+    await this._drawCards(first, 5, { silent: true });
+    await this._drawCards(second, 6, { silent: true });
     ui.render(this);
 
     await this._startTurn(first);
@@ -187,10 +187,10 @@ export class Game {
     await applyStartOfTurnEffects(who, s, this);
     if (s.phase === 'game-over') return;
 
-    this._drawCards(who, 1);
+    await this._drawCards(who, 1);
     while (hero._pendingDraw > 0) {
       hero._pendingDraw -= 1;
-      this._drawCards(who, 1);
+      await this._drawCards(who, 1);
     }
     if (s.phase === 'game-over') return; // fatigue can kill
 
@@ -355,7 +355,7 @@ export class Game {
 
   // ── Drawing ────────────────────────────────────────────────────────────────
 
-  _drawCards(who, n, { silent = false } = {}) {
+  async _drawCards(who, n, { silent = false } = {}) {
     const hero = this.state[who];
     for (let i = 0; i < n; i++) {
       if (hero.deck.length === 0) {
@@ -368,14 +368,39 @@ export class Game {
       }
       const card = hero.deck.pop();
       if (hero.hand.length >= HAND_CAP) {
-        hero.discard.push(card);
-        this.log(`${who === 'player' ? 'Your' : 'Opponent’s'} hand is full — ${who === 'player' ? card.name : 'a card'} is burned.`);
+        if (who === 'player' && this.state.phase !== 'game-over') {
+          await this._chooseDiscard(card);
+        } else {
+          hero.discard.push(card);
+          this.log('Opponent’s hand is full — a card is burned.');
+        }
         continue;
       }
       card._justDrawn = true;
       hero.hand.push(card);
       if (!silent && who === 'player') this.log(`You draw ${card.name}.`);
     }
+  }
+
+  // Hand full on draw: the drawn card joins the hand temporarily and the
+  // player picks which of the 8 to discard. Timeout/Escape discards the
+  // freshly drawn card.
+  async _chooseDiscard(drawnCard) {
+    const hero = this.state.player;
+    drawnCard._justDrawn = true;
+    hero.hand.push(drawnCard); // temporarily 8 cards
+    ui.render(this);
+    this.log(`You draw ${drawnCard.name} — but your hand is full!`);
+
+    const pick = await this._requestTarget(
+      'discard-hand',
+      'Hand full — click a card to discard',
+    );
+    const discard = pick || drawnCard;
+    hero.hand = hero.hand.filter((c) => c !== discard);
+    hero.discard.push(discard);
+    this.log(`You discard ${discard.name}.`);
+    ui.render(this);
   }
 
   // ── Dead sweep + Volatile ──────────────────────────────────────────────────
@@ -513,6 +538,7 @@ export class Game {
   // ── Target selection ───────────────────────────────────────────────────────
 
   // kind: 'any' (enemy creature or hero) | 'friendly' | 'enemy-creature'
+  //       | 'discard-hand' (pick one of your own hand cards)
   _requestTarget(kind, promptText) {
     const s = this.state;
     ui.showSorceryPrompt(promptText, TARGET_TIMEOUT_MS);
@@ -533,6 +559,9 @@ export class Game {
         const e = document.querySelector(`#player-board [data-instance-id="${c.instanceId}"]`);
         if (e) els.push(e);
       }
+    }
+    if (kind === 'discard-hand') {
+      els.push(...document.querySelectorAll('#player-hand .card'));
     }
     ui.highlightTargets(els);
 
@@ -646,6 +675,13 @@ export class Game {
     // Mid-sorcery target selection intercepts clicks.
     if (this._targetRequest) {
       const req = this._targetRequest;
+      if (req.kind === 'discard-hand') {
+        if (cardEl && cardEl.parentElement?.id === 'player-hand') {
+          const card = s.player.hand[Number(cardEl.dataset.handIndex)];
+          if (card) req.finish(card);
+        }
+        return;
+      }
       if (portrait && req.kind === 'any') { req.finish('hero'); return; }
       if (cardEl?.dataset.instanceId) {
         const id = cardEl.dataset.instanceId;
@@ -800,7 +836,7 @@ export class Game {
     if (this._preloaded) return;
     this._preloaded = true;
     const urls = [
-      'assets/board/arena_duel.webp',
+      ...ui.ARENAS.map((a) => `assets/board/${a}.webp`),
       ...['berserker', 'tactician', 'gambler'].map((n) => `assets/opponents/${n}.webp`),
       ...CARDS.map((c) => `assets/cards/${c.art}.webp`),
       `assets/cards/${RECRUIT_TOKEN.art}.webp`,
@@ -856,10 +892,10 @@ const SORCERY_HANDLERS = {
       notation: '1d6', label: 'Coin Flip!', context: '4+: draw 2 · 1–3: draw 1, take 1', bestThreshold: 4,
     });
     if (roll.total >= 4) {
-      game._drawCards(who, 2);
+      await game._drawCards(who, 2);
       game.log('Heads! Draw 2 cards.');
     } else {
-      game._drawCards(who, 1);
+      await game._drawCards(who, 1);
       game.dealToHero(who, 1, { source: card.name });
       game.log('Tails — draw 1, take 1 damage.');
     }
@@ -894,7 +930,7 @@ const SORCERY_HANDLERS = {
       notation: '1d6', label: 'Lucky Draw!', context: '1–2: draw 1 · 3–4: draw 2 · 5–6: draw 3', bestThreshold: 5,
     });
     const n = roll.total <= 2 ? 1 : roll.total <= 4 ? 2 : 3;
-    game._drawCards(who, n);
+    await game._drawCards(who, n);
     game.log(`Lucky Draw: ${n} card${n > 1 ? 's' : ''}.`);
   },
 
@@ -1023,7 +1059,7 @@ const SORCERY_HANDLERS = {
   S016: async (game, who, card) => {
     const roll = await game.roll(who, { notation: '2d6', label: 'Second Wind', context: 'Restore HP + draw a card' });
     game.healHero(who, roll.total, card.name);
-    game._drawCards(who, 1);
+    await game._drawCards(who, 1);
   },
 
   // Meteor — 3d6 to a target; overkill points can return HP (cap 5).
@@ -1071,10 +1107,10 @@ const SORCERY_HANDLERS = {
     if (a === 6 && b === 6) {
       game.critFanfare(who, 'Twin Fates CRITICAL!');
       game.dealToHero(enemyOf(who), roll.total * 2, { source: card.name});
-      game._drawCards(who, 2);
+      await game._drawCards(who, 2);
       game.log(`Twin sixes! ${roll.total * 2} damage AND 2 cards.`);
     } else if (a === b) {
-      game._drawCards(who, 2);
+      await game._drawCards(who, 2);
       game.log(`Doubles (${a}s) — draw 2 cards instead of damage.`);
     } else {
       game.dealToHero(enemyOf(who), roll.total, { source: card.name});
@@ -1168,13 +1204,13 @@ const SORCERY_HANDLERS = {
     const roll = await game.roll(who, {
       notation: '1d6', label: 'Wheel of Fortune!', context: 'Each player draws that many', bestThreshold: 6,
     });
-    game._drawCards('player', roll.total);
-    game._drawCards('opponent', roll.total);
+    await game._drawCards('player', roll.total);
+    await game._drawCards('opponent', roll.total);
     const bonus = await game.roll(who, {
       notation: '1d6', label: 'The Wheel spins again…', context: '5–6: you draw 1 extra', allowReroll: false,
     });
     if (bonus.total >= 5) {
-      game._drawCards(who, 1);
+      await game._drawCards(who, 1);
       game.log('The Wheel favours the caster — 1 extra card.');
     }
     ui.render(game);

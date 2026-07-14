@@ -2,4 +2,8 @@
 
 import { Game } from './game.js';
 
-new Game().init();
+const game = new Game();
+game.init();
+
+// Debug handle (also used by automated tests).
+window.game = game;

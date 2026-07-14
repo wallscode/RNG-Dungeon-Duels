@@ -123,12 +123,25 @@ BOARD = {
         "The background is dark, moody, and shrouded in shadows so foreground cards "
         "pop. The center is flat and clean to host dice animations."
     ),
+    "arena_crypt": (
+        "A wide atmospheric undead crypt duel arena, a vast moonlit necropolis floor "
+        "flanked by rows of ancient mausoleums and leaning tombstones, lit by floating "
+        "ghostly blue braziers. The background is dark, moody, and shrouded in fog so "
+        "foreground cards pop. The center is flat and clean to host dice animations."
+    ),
+    "arena_forge": (
+        "A wide atmospheric volcanic forge duel arena, a colossal obsidian battlefield "
+        "ringed by channels of glowing lava, giant anvils and hanging chains at the "
+        "edges, lit from below by molten light. The background is dark, moody, and "
+        "shrouded in smoke so foreground cards pop. The center is flat and clean to "
+        "host dice animations."
+    ),
 }
 
 OPPONENTS = {
-    "berserker": "A furious bare-chested northern barbarian warlord, wild red hair, battle scars, roaring with absolute rage, dramatic torchlit dungeon background.",
-    "tactician": "A composed, calculating elven strategist in dark leather tactical armor, cold analytical eyes studying an invisible battlefield, candlelit war room.",
-    "gambler": "A roguish, grinning half-elf with a wide-brimmed hat, shuffling glowing runic cards between nimble fingers, dimly lit tavern background.",
+    "berserker": "Close-up head and shoulders portrait, face filling most of the frame: a furious bare-chested northern barbarian warlord, wild red hair, battle scars, roaring with absolute rage, dramatic torchlit dungeon background.",
+    "tactician": "Close-up head and shoulders portrait, face filling most of the frame: a composed, calculating elven strategist in dark leather tactical armor, cold analytical eyes studying an invisible battlefield, candlelit war room.",
+    "gambler": "Close-up head and shoulders portrait, face filling most of the frame: a roguish, grinning half-elf with a wide-brimmed hat, glowing runic cards fanned near his face, dimly lit tavern background.",
 }
 
 
@@ -193,7 +206,10 @@ def main():
 
     todo = []
     for path, prompt, ratio in jobs():
-        if args.only and path.stem not in args.only:
+        # --only accepts a bare basename ("hydra") or dir-qualified form
+        # ("opponents/berserker") to disambiguate name collisions with cards.
+        names = {path.stem, f"{path.parent.name}/{path.stem}"}
+        if args.only and not names.intersection(args.only):
             continue
         if path.exists() and not args.force:
             continue

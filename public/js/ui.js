@@ -9,6 +9,8 @@ const HP_MAX = 25;
 const MANA_MAX = 7;
 const HP_DANGER = 8;
 
+export const ARENAS = ['arena_duel', 'arena_crypt', 'arena_forge'];
+
 function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -24,10 +26,11 @@ export function buildBoard(root) {
   const board = el('div', 'board');
   board.id = 'board';
 
-  // Board background art with CSS fallback if missing.
+  // Random arena per match, with CSS fallback if the image is missing.
+  const arena = ARENAS[Math.floor(Math.random() * ARENAS.length)];
   const bg = new Image();
-  bg.onload = () => { board.style.backgroundImage = `url('assets/board/arena_duel.webp')`; };
-  bg.src = 'assets/board/arena_duel.webp';
+  bg.onload = () => { board.style.backgroundImage = `url('assets/board/${arena}.webp')`; };
+  bg.src = `assets/board/${arena}.webp`;
 
   // Opponent zone.
   const oppZone = el('div', 'zone zone-opponent');
@@ -146,11 +149,45 @@ export function buildBoard(root) {
   svg.id = 'arc-svg';
   root.appendChild(svg);
 
+  // Game-themed keyword tooltip (cards clip overflow, so it lives at root).
+  const tip = el('div', '');
+  tip.id = 'keyword-tooltip';
+  root.appendChild(tip);
+  bindKeywordTooltips(root, tip);
+
   // Intro screen container.
   const intro = el('div', '');
   intro.id = 'intro-screen';
   intro.hidden = true;
   root.appendChild(intro);
+}
+
+// Delegated hover handling for keyword chips: shows a themed tooltip above the
+// chip (position accounts for hover-scaled cards via getBoundingClientRect).
+function bindKeywordTooltips(root, tip) {
+  root.addEventListener('mouseover', (ev) => {
+    const chip = ev.target.closest?.('.keyword-chip[data-keyword]');
+    if (!chip) return;
+    const text = KEYWORD_TEXT[chip.dataset.keyword];
+    if (!text) return;
+    tip.innerHTML = '';
+    tip.appendChild(el('div', 'keyword-tooltip-name', chip.dataset.keyword));
+    tip.appendChild(el('div', 'keyword-tooltip-text', text));
+    tip.classList.add('visible');
+    const rect = chip.getBoundingClientRect();
+    const tipRect = tip.getBoundingClientRect();
+    let x = rect.left + rect.width / 2 - tipRect.width / 2;
+    x = Math.max(8, Math.min(x, window.innerWidth - tipRect.width - 8));
+    let y = rect.top - tipRect.height - 8;
+    if (y < 8) y = rect.bottom + 8; // flip below when clipped at the top
+    tip.style.left = `${x}px`;
+    tip.style.top = `${y}px`;
+  });
+  root.addEventListener('mouseout', (ev) => {
+    if (ev.target.closest?.('.keyword-chip[data-keyword]')) {
+      tip.classList.remove('visible');
+    }
+  });
 }
 
 function statCol(id, label, kind) {
@@ -200,7 +237,7 @@ export function buildCardEl(card, { zone, justDrawn = false } = {}) {
     const chips = el('div', 'card-keywords');
     for (const k of card.keywords) {
       const chip = el('span', 'keyword-chip', k.value !== undefined ? `${k.name} (${k.value})` : k.name);
-      chip.title = KEYWORD_TEXT[k.name] || '';
+      chip.dataset.keyword = k.name; // custom themed tooltip (see bindKeywordTooltips)
       chips.appendChild(chip);
     }
     div.appendChild(chips);
