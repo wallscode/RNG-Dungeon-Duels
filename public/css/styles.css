@@ -268,11 +268,13 @@ button { font-family: inherit; cursor: pointer; }
   box-shadow: 0 1px 3px #000a;
 }
 
+/* Art fills the whole card; name/text/stats float over it on translucent
+   panels sized to their content. */
 .card-art {
-  position: relative;
-  height: 42%;
-  flex-shrink: 0;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
+  z-index: 0;
 }
 
 .card-art img {
@@ -306,16 +308,24 @@ button { font-family: inherit; cursor: pointer; }
 .card-art-icon { font-size: 14px; opacity: 0.8; }
 
 .card-name {
+  position: relative;
+  z-index: 3;
+  margin-top: auto; /* pushes the whole text block to the card's bottom */
+  background: rgba(18, 11, 5, 0.68);
   font-size: clamp(9px, 0.8vw, 13px);
   font-weight: 700;
   text-align: center;
-  padding: 2px 4px 0;
+  padding: 2px 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-shadow: 0 1px 2px #000;
 }
 
 .card-keywords {
+  position: relative;
+  z-index: 3;
+  background: rgba(18, 11, 5, 0.68);
   display: flex;
   flex-wrap: wrap;
   gap: 2px;
@@ -334,22 +344,37 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 .card-text {
-  flex: 1;
+  position: relative;
+  z-index: 3;
+  background: rgba(18, 11, 5, 0.68);
   font-size: clamp(7px, 0.62vw, 10px);
-  color: var(--color-text-muted);
+  color: #e8e0d4;
   padding: 2px 5px;
-  overflow: hidden;
   line-height: 1.25;
+  text-shadow: 0 1px 2px #000;
+  /* Only as tall as the text needs; clamp long text until hover reveals it */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
 }
 
-.card:hover .card-text { color: var(--color-text); }
+.card:hover .card-text,
+.card.zone-pin .card-text {
+  color: var(--color-text);
+  -webkit-line-clamp: unset;
+}
 
 .card-stats {
+  position: relative;
+  z-index: 3;
+  background: rgba(18, 11, 5, 0.68);
   display: flex;
   justify-content: space-between;
   padding: 2px 5px 4px;
   font-weight: 800;
   font-size: clamp(10px, 0.9vw, 14px);
+  text-shadow: 0 1px 2px #000;
 }
 
 .card-atk { color: var(--color-accent); }
