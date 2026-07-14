@@ -111,8 +111,6 @@ export function buildBoard(root) {
   toolbar.id = 'settings-toolbar';
   const turnCounter = el('span', 'toolbar-stat');
   turnCounter.id = 'turn-counter';
-  const score = el('span', 'toolbar-stat');
-  score.id = 'score-display';
   const helpBtn = el('button', 'toolbar-btn', '?');
   helpBtn.id = 'help-btn';
   helpBtn.title = 'How to play';
@@ -128,7 +126,7 @@ export function buildBoard(root) {
   const sndSfx = el('button', 'toolbar-btn', '💥');
   sndSfx.id = 'snd-sfx-btn';
   sndSfx.title = 'Toggle sound effects';
-  toolbar.append(turnCounter, score, helpBtn, recoverBtn, sndAll, sndMusic, sndSfx);
+  toolbar.append(turnCounter, helpBtn, recoverBtn, sndAll, sndMusic, sndSfx);
   root.appendChild(toolbar);
 
   // Logs.
@@ -281,7 +279,9 @@ export function render(game) {
     const cardEl = buildCardEl(card, { zone: 'hand', justDrawn: card._justDrawn });
     delete card._justDrawn;
     cardEl.dataset.handIndex = String(i);
-    if (s.phase === 'player-turn' && card.cost <= s.player.mana) cardEl.classList.add('playable');
+    if (s.phase === 'player-turn') {
+      cardEl.classList.add(card.cost <= s.player.mana ? 'playable' : 'unplayable');
+    }
     hand.appendChild(cardEl);
   });
 
@@ -300,7 +300,6 @@ export function render(game) {
 
   // Toolbar.
   document.getElementById('turn-counter').textContent = `Turn ${s.turnNumber}`;
-  document.getElementById('score-display').textContent = `Score ${game.liveScore()}`;
 
   // Collapse indicator.
   const ci = document.getElementById('collapse-indicator');
@@ -337,6 +336,11 @@ function renderBoardRow(id, boardArr, game, side) {
     if (creature.currentHp <= 0) continue;
     const cardEl = buildCardEl(creature, { zone: 'board' });
     cardEl.dataset.side = side;
+    // Renders happen in quick bursts (play → effects → sweep); keep the
+    // play-in animation alive across rebuilds within its window.
+    if (creature._justPlayed && Date.now() - creature._justPlayed < 600) {
+      cardEl.classList.add('just-played');
+    }
     if (side === 'player' && s.phase === 'player-turn'
         && !creature.summoningSick && !creature.cantAttackThisTurn && !creature.hasAttackedThisTurn) {
       cardEl.classList.add('can-attack');
@@ -471,9 +475,12 @@ export function showPersonalityReveal(name, copy) {
 
 // ── Active-card pin ──────────────────────────────────────────────────────────
 
-export function setActiveCard(card, label) {
+// side 'opponent' hovers the card over the centre of the opponent's play
+// space; 'player' (default) pins it to the left edge.
+export function setActiveCard(card, label, side = 'player') {
   const pin = document.getElementById('active-card-pin');
   pin.innerHTML = '';
+  pin.classList.toggle('opp-cast', side === 'opponent');
   pin.appendChild(el('div', 'pin-label', label));
   pin.appendChild(buildCardEl(card, { zone: 'pin' }));
   pin.classList.add('visible');
@@ -481,7 +488,7 @@ export function setActiveCard(card, label) {
 
 export function clearActiveCard() {
   const pin = document.getElementById('active-card-pin');
-  pin.classList.remove('visible');
+  pin.classList.remove('visible', 'opp-cast');
   pin.innerHTML = '';
 }
 
@@ -536,14 +543,27 @@ export function hideAttackPrompt() {
   document.getElementById('attack-prompt').classList.remove('visible');
 }
 
-export function showSorceryPrompt(text) {
+// Shows the sticky sorcery/target prompt. Pass durationMs for timed decisions
+// — a countdown bar fills the prompt's bottom edge so the deadline is visible.
+export function showSorceryPrompt(text, durationMs = null) {
   const p = document.getElementById('sorcery-prompt');
-  p.textContent = text;
+  p.innerHTML = '';
+  p.appendChild(el('div', 'prompt-text', text));
+  if (durationMs) {
+    const bar = el('div', 'prompt-countdown');
+    const inner = el('div', 'prompt-countdown-inner');
+    bar.appendChild(inner);
+    p.appendChild(bar);
+    inner.style.transitionDuration = `${durationMs}ms`;
+    requestAnimationFrame(() => { inner.style.transform = 'scaleX(0)'; });
+  }
   p.classList.add('visible');
 }
 
 export function hideSorceryPrompt() {
-  document.getElementById('sorcery-prompt').classList.remove('visible');
+  const p = document.getElementById('sorcery-prompt');
+  p.classList.remove('visible');
+  p.innerHTML = '';
 }
 
 // ── Intro screen ─────────────────────────────────────────────────────────────
@@ -554,7 +574,7 @@ const RULE_CARDS = [
   { icon: '🎲', heading: 'Dice Decide', body: 'Every roll is live; spend 1 Focus to reroll; +1 Focus/turn (cap 5); Lucky creatures give a free reroll.' },
   { icon: '💎', heading: 'Mana Ramp', body: 'Start at 1, +1 per turn up to 7. Mana refills every turn.' },
   { icon: '⚠️', heading: 'The Collapse', body: 'Starts round 5: 1d6 to both heroes each round — 2d6 from round 9. Nobody is safe.' },
-  { icon: '🏆', heading: 'Win & Score', body: '0 HP loses. Score = damage × 10 + speed bonus + HP × 20 + 500 win bonus.' },
+  { icon: '🏆', heading: 'Win', body: 'Reduce the enemy hero to 0 HP before The Collapse claims you both.' },
 ];
 
 const QUICK_TIPS = [

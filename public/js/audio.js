@@ -8,6 +8,7 @@ let _ambientEnabled = true;
 let _ambientMood = 'calm';
 let _ambientRunning = false;
 let _loopTimer = null;
+let _activeMasters = []; // master gain of each scheduled loop cycle, for hard stop
 
 export function initAudio() {
   if (ctx) {
@@ -324,6 +325,18 @@ export function startAmbient() {
 export function stopAmbient() {
   _ambientRunning = false;
   if (_loopTimer) { clearTimeout(_loopTimer); _loopTimer = null; }
+  // A loop cycle schedules its whole phrase upfront on the audio timeline, so
+  // silencing means killing each cycle's master gain — not just skipping the
+  // next cycle.
+  for (const master of _activeMasters) {
+    try {
+      master.gain.cancelScheduledValues(ctx.currentTime);
+      master.gain.setValueAtTime(master.gain.value, ctx.currentTime);
+      master.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.1);
+      setTimeout(() => { try { master.disconnect(); } catch { /* already gone */ } }, 200);
+    } catch { /* context closed */ }
+  }
+  _activeMasters = [];
 }
 
 function scheduleLoop() {
@@ -334,6 +347,7 @@ function scheduleLoop() {
   const master = ctx.createGain();
   master.gain.value = mood.masterGain;
   master.connect(ctx.destination);
+  _activeMasters.push(master);
 
   // Melody: square wave, per-note envelope.
   let t = t0;
@@ -368,6 +382,11 @@ function scheduleLoop() {
   }
 
   const loopLen = Math.max(melodyLen, bt - t0);
+  // Prune this cycle's master once its phrase has fully played out.
+  setTimeout(() => {
+    _activeMasters = _activeMasters.filter((m) => m !== master);
+    try { master.disconnect(); } catch { /* already gone */ }
+  }, (loopLen + 1) * 1000);
   // Reschedule 500ms before this cycle ends so the next mood is picked up cleanly.
   _loopTimer = setTimeout(scheduleLoop, Math.max(100, (loopLen - 0.5) * 1000));
 }

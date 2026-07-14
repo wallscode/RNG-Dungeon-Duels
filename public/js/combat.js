@@ -189,13 +189,11 @@ async function resolveSwing(game, opts) {
   if (target === 'hero') {
     game.dealToHero(heroSide, damage, {
       source: attacker.name,
-      countsForScore: attackerSide === 'player' && heroSide !== 'player',
     });
     game.log(`${attacker.name} hits ${game.sideName(heroSide)}’s hero for ${damage}.`);
   } else {
     damage = await resolveDamageToCreature(game, target, targetSide, damage, attacker.name);
     if (attackerSide === 'player' && targetSide === 'opponent') {
-      state.score.damageDealt += damage;
     }
   }
 
@@ -274,7 +272,7 @@ async function runPostHitTriggers(game, { attackerSide, attacker, target, target
         context: 'Bonus damage to enemy hero',
       });
       game.dealToHero(enemySide, bolt.total, {
-        source: attacker.name, countsForScore: attackerSide === 'player',
+        source: attacker.name,
       });
       game.log(`${attacker.name} calls lightning for ${bolt.total}!`);
     }
@@ -288,7 +286,7 @@ async function runPostHitTriggers(game, { attackerSide, attacker, target, target
     });
     if (roll.total >= 5) {
       game.dealToHero(enemySide, 2, {
-        source: attacker.name, countsForScore: attackerSide === 'player',
+        source: attacker.name,
       });
       game.log(`${attacker.name} swarms the enemy hero for 2!`);
     }

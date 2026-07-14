@@ -94,6 +94,8 @@ button { font-family: inherit; cursor: pointer; }
   justify-content: space-between;
 }
 
+/* Portrait sits immediately left of the face-down hand; the pair centers as
+   one cluster instead of the hand stretching the portrait to the far edge. */
 .opp-top-row {
   display: flex;
   align-items: center;
@@ -101,6 +103,8 @@ button { font-family: inherit; cursor: pointer; }
   justify-content: center;
   min-height: 0;
 }
+
+.opp-top-row .hand-row { flex: 0 1 auto; }
 
 .player-bottom-row {
   display: flex;
@@ -386,6 +390,15 @@ button { font-family: inherit; cursor: pointer; }
 /* Card states */
 
 .card.playable { border-color: var(--color-focus); box-shadow: 0 0 8px #e8a83055; }
+
+/* Not enough mana yet: clearly muted next to playable cards. */
+.card.unplayable { filter: grayscale(0.7) brightness(0.55); }
+.card.unplayable:hover { filter: none; } /* hover still lets you read it */
+
+.card.unplayable .card-cost { background: #555; }
+
+/* Cards animate onto the board rather than appearing instantly. */
+.card.just-played { animation: cardPlayIn 450ms cubic-bezier(0.2, 1.4, 0.4, 1); }
 
 .card.can-attack { animation: canAttackPulse 1.6s ease-in-out infinite; cursor: pointer; }
 
@@ -892,7 +905,27 @@ button { font-family: inherit; cursor: pointer; }
 
 #attack-prompt.visible, #sorcery-prompt.visible { display: block; }
 
-#sorcery-prompt { animation: sorceryPromptPulse 1.4s ease-in-out infinite; border-color: #c050d0; }
+#sorcery-prompt { animation: sorceryPromptPulse 1.4s ease-in-out infinite; border-color: #c050d0; padding-bottom: 12px; }
+
+.prompt-countdown {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 5px;
+  height: 4px;
+  background: #00000066;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.prompt-countdown-inner {
+  height: 100%;
+  background: #c050d0;
+  transform-origin: left;
+  transform: scaleX(1);
+  transition-property: transform;
+  transition-timing-function: linear;
+}
 
 #log-scroll {
   position: fixed;
@@ -972,6 +1005,13 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 #active-card-pin.visible { display: flex; }
+
+/* Opponent sorceries hover over the centre of their play space. */
+#active-card-pin.opp-cast {
+  left: 50%;
+  top: 4%;
+  transform: translateX(-50%);
+}
 
 .pin-label {
   font-size: 11px;
@@ -1142,4 +1182,10 @@ button { font-family: inherit; cursor: pointer; }
 @keyframes sorceryPromptPulse {
   0%, 100% { box-shadow: 0 0 4px #c050d044; }
   50% { box-shadow: 0 0 14px #c050d0aa; }
+}
+
+@keyframes cardPlayIn {
+  0% { transform: translateY(-26px) scale(0.55); opacity: 0; }
+  60% { opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
 }

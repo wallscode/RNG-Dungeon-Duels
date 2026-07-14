@@ -75,7 +75,7 @@ export async function applyOnEnterEffects(game, creature, owner) {
       context: '5–6: 1 damage to enemy hero', bestThreshold: 5,
     });
     if (roll.total >= 5) {
-      game.dealToHero(enemy, 1, { source: creature.name, countsForScore: false });
+      game.dealToHero(enemy, 1, { source: creature.name});
       game.log(`${creature.name} singes the enemy hero for 1!`);
     }
   }
@@ -91,7 +91,7 @@ export async function applyOnEnterEffects(game, creature, owner) {
       const each = Math.floor(roll.total / targets.length);
       if (each > 0) {
         for (const t of targets) {
-          game.dealToCreature(t, enemy, each, { source: creature.name, countsForScore: false });
+          game.dealToCreature(t, enemy, each, { source: creature.name});
         }
         game.log(`${creature.name} burns each enemy creature for ${each}.`);
       } else {
@@ -108,7 +108,7 @@ export async function applyOnEnterEffects(game, creature, owner) {
       const roll = await game.roll(owner, {
         notation: '1d6', label: `${creature.name} — fire blast!`, context: `vs ${t.name}`,
       });
-      game.dealToCreature(t, enemy, roll.total, { source: creature.name, countsForScore: false });
+      game.dealToCreature(t, enemy, roll.total, { source: creature.name});
       game.log(`${creature.name} blasts ${t.name} for ${roll.total}.`);
     }
   }
@@ -136,12 +136,12 @@ export async function applyOnEnterEffects(game, creature, owner) {
       const each = Math.floor(roll.total / targets.length);
       if (each > 0) {
         for (const t of targets) {
-          game.dealToCreature(t, enemy, each, { source: creature.name, countsForScore: false });
+          game.dealToCreature(t, enemy, each, { source: creature.name});
         }
         game.log(`${creature.name}’s breath sears each enemy creature for ${each}.`);
       }
     } else {
-      game.dealToHero(enemy, roll.total, { source: creature.name, countsForScore: false });
+      game.dealToHero(enemy, roll.total, { source: creature.name});
       game.log(`${creature.name}’s breath scorches the enemy hero for ${roll.total}!`);
     }
   }

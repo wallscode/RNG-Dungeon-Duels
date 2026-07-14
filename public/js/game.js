@@ -106,7 +106,6 @@ export class Game {
       _roundStarter: undefined,
       phase: 'setup',
       activePlayer: 'player',
-      score: { damageDealt: 0 },
       winner: null,
     };
 
@@ -317,20 +316,18 @@ export class Game {
 
   sideName(who) { return who === 'player' ? 'your' : 'the opponent'; }
 
-  dealToHero(side, dmg, { source = '', countsForScore = false } = {}) {
+  dealToHero(side, dmg, { source = '' } = {}) {
     if (dmg <= 0) return;
     this.state[side].hp -= dmg;
-    if (countsForScore) this.state.score.damageDealt += dmg;
     ui.render(this);
     this.checkGameOver();
   }
 
   // Direct (non-combat) creature damage: sorceries and effects bypass
   // Defender/Brittle — those trigger only when a creature is attacked.
-  dealToCreature(creature, side, dmg, { source = '', countsForScore = false } = {}) {
+  dealToCreature(creature, side, dmg, { source = '' } = {}) {
     if (dmg <= 0) return;
     creature.currentHp -= dmg;
-    if (countsForScore) this.state.score.damageDealt += dmg;
     ui.render(this);
   }
 
@@ -400,7 +397,7 @@ export class Game {
           const pick = pool[Math.floor(Math.random() * pool.length)];
           if (pick === 'hero') {
             this.dealToHero(enemySide, roll.total, {
-              source: died.name, countsForScore: side === 'player',
+              source: died.name,
             });
             this.log(`${died.name} explodes for ${roll.total} on the enemy hero!`);
           } else {
@@ -435,6 +432,7 @@ export class Game {
         return;
       }
       const instance = createCreatureInstance(card);
+      instance._justPlayed = Date.now();
       hero.board.push(instance);
       this.log(`${who === 'player' ? 'You play' : 'Opponent plays'} ${card.name}.`);
       ui.render(this);
@@ -481,7 +479,7 @@ export class Game {
     hero.hand = hero.hand.filter((c) => c !== card);
     playSound('card-play');
     this.log(`Cast: ${card.name}`);
-    ui.setActiveCard(card, who === 'player' ? 'You Cast' : 'Opponent Casts');
+    ui.setActiveCard(card, who === 'player' ? 'You Cast' : 'Opponent Casts', who);
     ui.render(this);
 
     try {
@@ -508,7 +506,7 @@ export class Game {
   // kind: 'any' (enemy creature or hero) | 'friendly' | 'enemy-creature'
   _requestTarget(kind, promptText) {
     const s = this.state;
-    ui.showSorceryPrompt(promptText);
+    ui.showSorceryPrompt(promptText, TARGET_TIMEOUT_MS);
 
     const els = [];
     if (kind === 'any' || kind === 'enemy-creature') {
@@ -584,20 +582,27 @@ export class Game {
       ui.showIntro({ helpMode: true, onBegin: () => {} });
     });
     document.getElementById('recover-btn').addEventListener('click', () => this._forceRecover());
-    const sndAll = document.getElementById('snd-all-btn');
-    sndAll.addEventListener('click', () => {
+    document.getElementById('snd-all-btn').addEventListener('click', () => {
       const on = !(isSfxEnabled() || isAmbientEnabled());
       setAllSound(on);
-      sndAll.textContent = on ? '🔊' : '🔇';
+      this._updateSoundButtons();
     });
-    document.getElementById('snd-music-btn').addEventListener('click', (ev) => {
+    document.getElementById('snd-music-btn').addEventListener('click', () => {
       setAmbientEnabled(!isAmbientEnabled());
-      ev.target.style.opacity = isAmbientEnabled() ? '1' : '0.4';
+      this._updateSoundButtons();
     });
-    document.getElementById('snd-sfx-btn').addEventListener('click', (ev) => {
+    document.getElementById('snd-sfx-btn').addEventListener('click', () => {
       setSfxEnabled(!isSfxEnabled());
-      ev.target.style.opacity = isSfxEnabled() ? '1' : '0.4';
+      this._updateSoundButtons();
     });
+    this._updateSoundButtons();
+  }
+
+  _updateSoundButtons() {
+    const anyOn = isSfxEnabled() || isAmbientEnabled();
+    document.getElementById('snd-all-btn').textContent = anyOn ? '🔊' : '🔇';
+    document.getElementById('snd-music-btn').style.opacity = isAmbientEnabled() ? '1' : '0.35';
+    document.getElementById('snd-sfx-btn').style.opacity = isSfxEnabled() ? '1' : '0.35';
   }
 
   _forceRecover() {
@@ -743,14 +748,6 @@ export class Game {
     return true;
   }
 
-  liveScore() {
-    const s = this.state;
-    const damageScore = s.score.damageDealt * 10;
-    const speedBonus = Math.max(0, 8 - s.turnNumber) * 90;
-    const hpBonus = Math.max(0, s.player.hp) * 20;
-    return damageScore + speedBonus + hpBonus;
-  }
-
   _endGame(winner) {
     const s = this.state;
     if (s.phase === 'game-over') return;
@@ -762,12 +759,6 @@ export class Game {
     playSound(isWin ? 'victory' : 'defeat');
     ui.banner(isWin ? 'VICTORY!' : 'DEFEAT', isWin ? 'victory' : 'defeat', 2200);
 
-    const damageScore = s.score.damageDealt * 10;
-    const speedBonus = Math.max(0, 8 - s.turnNumber) * 90;
-    const hpBonus = Math.max(0, s.player.hp) * 20;
-    const winBonus = isWin ? 500 : 0;
-    const finalScore = damageScore + speedBonus + hpBonus + winBonus;
-
     const body = document.createElement('div');
     body.className = 'gameover-body';
     const flavour = document.createElement('p');
@@ -776,18 +767,9 @@ export class Game {
       ? 'The dungeon falls silent. The dice were on your side.'
       : 'The dice had other plans. The dungeon claims another duelist.';
     body.appendChild(flavour);
-    const scoreLine = document.createElement('div');
-    scoreLine.className = 'gameover-score';
-    scoreLine.textContent = `Final Score: ${finalScore}`;
-    body.appendChild(scoreLine);
-    const breakdown = document.createElement('div');
-    breakdown.className = 'gameover-breakdown';
-    breakdown.textContent =
-      `${s.score.damageDealt} dmg × 10 = ${damageScore}  +  Speed bonus ${speedBonus}  +  HP bonus ${hpBonus}  +  Victory bonus ${winBonus}`;
-    body.appendChild(breakdown);
     const meta = document.createElement('div');
     meta.className = 'gameover-meta';
-    meta.textContent = `${s.turnNumber} turns  |  ${s.score.damageDealt} damage dealt  |  ${Math.max(0, s.player.hp)} HP remaining`;
+    meta.textContent = `${s.turnNumber} turns  |  ${Math.max(0, s.player.hp)} HP remaining`;
     body.appendChild(meta);
 
     setTimeout(() => {
@@ -836,10 +818,10 @@ async function damageSorceryRoll(game, who, card, notation, context) {
 async function dealSorceryDamage(game, who, card, target, dmg) {
   const enemy = enemyOf(who);
   if (target === 'hero') {
-    game.dealToHero(enemy, dmg, { source: card.name, countsForScore: who === 'player' });
+    game.dealToHero(enemy, dmg, { source: card.name});
     game.log(`${card.name} hits the ${enemy === 'opponent' ? 'enemy' : 'your'} hero for ${dmg}.`);
   } else {
-    game.dealToCreature(target, enemy, dmg, { source: card.name, countsForScore: who === 'player' });
+    game.dealToCreature(target, enemy, dmg, { source: card.name});
     game.log(`${card.name} hits ${target.name} for ${dmg}.`);
   }
 }
@@ -926,7 +908,6 @@ const SORCERY_HANDLERS = {
       if (live.length === 0) break;
       const t = live[Math.floor(Math.random() * live.length)];
       t.currentHp -= 1;
-      if (who === 'player') game.state.score.damageDealt += 1;
       hits.set(t.name, (hits.get(t.name) || 0) + 1);
     }
     game.log(`Chain Lightning: ${[...hits].map(([n, d]) => `${n} takes ${d}`).join(', ')}.`);
@@ -984,7 +965,7 @@ const SORCERY_HANDLERS = {
     if (targets.length === 0) { game.log(`${card.name} frosts an empty field.`); return; }
     const { dmg } = await damageSorceryRoll(game, who, card, '1d4', 'Deal to all enemy creatures');
     for (const t of targets) {
-      game.dealToCreature(t, enemy, dmg, { source: card.name, countsForScore: who === 'player' });
+      game.dealToCreature(t, enemy, dmg, { source: card.name});
       if (t.currentHp > 0) {
         const freeze = await game.roll(who, {
           notation: '1d6', label: 'Freeze check', context: `5–6: ${t.name} can’t attack next turn`, allowReroll: false,
@@ -1080,14 +1061,14 @@ const SORCERY_HANDLERS = {
     const [a, b] = roll.rolls;
     if (a === 6 && b === 6) {
       game.critFanfare(who, 'Twin Fates CRITICAL!');
-      game.dealToHero(enemyOf(who), roll.total * 2, { source: card.name, countsForScore: who === 'player' });
+      game.dealToHero(enemyOf(who), roll.total * 2, { source: card.name});
       game._drawCards(who, 2);
       game.log(`Twin sixes! ${roll.total * 2} damage AND 2 cards.`);
     } else if (a === b) {
       game._drawCards(who, 2);
       game.log(`Doubles (${a}s) — draw 2 cards instead of damage.`);
     } else {
-      game.dealToHero(enemyOf(who), roll.total, { source: card.name, countsForScore: who === 'player' });
+      game.dealToHero(enemyOf(who), roll.total, { source: card.name});
       game.log(`Twin Fates strikes the enemy hero for ${roll.total}.`);
     }
   },
@@ -1108,7 +1089,6 @@ const SORCERY_HANDLERS = {
         t.currentHp -= 1;
         hits.set(t.name, (hits.get(t.name) || 0) + 1);
       }
-      if (who === 'player') game.state.score.damageDealt += 1;
     }
     if (heroHits > 0) {
       game.state[enemy].hp -= heroHits;
@@ -1142,7 +1122,9 @@ const SORCERY_HANDLERS = {
     let summoned = 0;
     for (let i = 0; i < roll.total; i++) {
       if (board.filter((c) => c.currentHp > 0).length >= BOARD_CAP) break;
-      board.push(createCreatureInstance(RECRUIT_TOKEN));
+      const recruit = createCreatureInstance(RECRUIT_TOKEN);
+      recruit._justPlayed = Date.now();
+      board.push(recruit);
       summoned += 1;
     }
     game.log(`${summoned} Recruit${summoned === 1 ? '' : 's'} answer${summoned === 1 ? 's' : ''} the call${summoned < roll.total ? ' (board full)' : ''}.`);
@@ -1156,7 +1138,7 @@ const SORCERY_HANDLERS = {
     if (targets.length > 0) {
       const { dmg } = await damageSorceryRoll(game, who, card, '3d8', 'Deal to ALL enemy creatures');
       for (const t of targets) {
-        game.dealToCreature(t, enemy, dmg, { source: card.name, countsForScore: who === 'player' });
+        game.dealToCreature(t, enemy, dmg, { source: card.name});
       }
       game.log(`Cataclysm crushes every enemy creature for ${dmg}.`);
     }
