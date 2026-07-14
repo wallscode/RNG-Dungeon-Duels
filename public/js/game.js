@@ -840,6 +840,7 @@ export class Game {
       ...['berserker', 'tactician', 'gambler'].map((n) => `assets/opponents/${n}.webp`),
       ...CARDS.map((c) => `assets/cards/${c.art}.webp`),
       `assets/cards/${RECRUIT_TOKEN.art}.webp`,
+      'assets/cards/sheep.webp', // Polymorph Gamble transform
     ];
     for (const url of urls) { const img = new Image(); img.src = url; }
   }

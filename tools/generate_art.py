@@ -87,6 +87,8 @@ CREATURES = {
     "hydra": "A terrifying multi-headed marsh serpent, three heads snapping forward with venomous green fangs bare, dark swamp setting.",
     "ancient_dragon": "An imposing ancient red dragon with iridescent scales and sprawling bat wings, breathing a cone of fire downward from a high mountain peak.",
     "recruit": "A young, determined human foot soldier holding a simple steel shortsword and wooden buckler shield, wearing a clean leather jerkin.",
+    # Polymorph Gamble (S015) transform target — deliberately weak and silly.
+    "sheep": "A comically unthreatening, scrawny little white sheep with big confused watery eyes and a startled dopey expression, wool slightly singed, standing awkwardly in a grand torchlit dungeon arena far too dramatic for it, faint pink transmutation sparkles still fizzing around its fluff.",
 }
 
 SORCERIES = {
