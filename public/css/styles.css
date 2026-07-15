@@ -482,8 +482,22 @@ button { font-family: inherit; cursor: pointer; }
 .card.dying {
   z-index: 600;
   pointer-events: none;
-  animation: creatureDeath 700ms ease-in forwards;
+  animation: creatureDeath 1700ms ease-in forwards;
 }
+
+/* Card flight (draws and opponent plays): a card back arcing in from the
+   right edge. Position driven by WAAPI transforms. */
+.card-flight {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1150;
+  pointer-events: none;
+  box-shadow: 0 8px 24px #000a;
+}
+
+/* Freshly drawn card settles into the hand from the right. */
+.card.drawn-in { animation: drawnIn 450ms cubic-bezier(0.2, 1.2, 0.4, 1); }
 
 /* Floating damage numbers */
 .float-dmg {
@@ -1307,6 +1321,11 @@ button { font-family: inherit; cursor: pointer; }
     opacity: 0;
     filter: grayscale(1) brightness(0.4);
   }
+}
+
+@keyframes drawnIn {
+  0% { transform: translateX(70px) scale(0.7); opacity: 0; }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
 }
 
 @keyframes floatDmg {

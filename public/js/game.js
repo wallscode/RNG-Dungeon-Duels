@@ -126,6 +126,9 @@ export class Game {
       _roundStarter: undefined,
       phase: 'setup',
       activePlayer: 'player',
+      // Match stats for the game-over summary: damage to the opponent's
+      // side counts as dealt, damage to the player's side as received.
+      stats: { dealt: 0, taken: 0 },
       winner: null,
     };
 
@@ -286,6 +289,8 @@ export class Game {
     const oppBefore = s.opponent.hp;
     s.player.hp -= roll.total;
     s.opponent.hp -= roll.total;
+    this.trackDamage('player', roll.total);
+    this.trackDamage('opponent', roll.total);
     ui.floatHeroDamage('player', roll.total);
     ui.floatHeroDamage('opponent', roll.total);
     this.log(`The Collapse deals ${roll.total} to both heroes.`);
@@ -361,9 +366,16 @@ export class Game {
 
   sideName(who) { return who === 'player' ? 'your' : 'the opponent'; }
 
+  trackDamage(receiverSide, dmg) {
+    if (dmg <= 0) return;
+    if (receiverSide === 'opponent') this.state.stats.dealt += dmg;
+    else this.state.stats.taken += dmg;
+  }
+
   dealToHero(side, dmg, { source = '' } = {}) {
     if (dmg <= 0) return;
     this.state[side].hp -= dmg;
+    this.trackDamage(side, dmg);
     ui.floatHeroDamage(side, dmg);
     ui.render(this);
     this.checkGameOver();
@@ -374,12 +386,14 @@ export class Game {
   dealToCreature(creature, side, dmg, { source = '' } = {}) {
     if (dmg <= 0) return;
     creature.currentHp -= dmg;
+    this.trackDamage(side, dmg);
     ui.floatCreatureDamage(creature.instanceId, dmg);
     ui.render(this);
   }
 
-  // Float hook for combat.js (which routes all UI through the game object).
-  showCreatureDamage(creature, dmg) {
+  // Damage-applied hook for combat.js (routes all UI through the game object).
+  showCreatureDamage(creature, dmg, side) {
+    if (side) this.trackDamage(side, dmg);
     ui.floatCreatureDamage(creature.instanceId, dmg);
   }
 
@@ -404,6 +418,7 @@ export class Game {
       if (hero.deck.length === 0) {
         hero.fatigue += 1;
         hero.hp -= hero.fatigue;
+        this.trackDamage(who, hero.fatigue);
         ui.floatHeroDamage(who, hero.fatigue);
         this.log(`${who === 'player' ? 'Your deck is empty — you take' : 'Opponent’s deck is empty — it takes'} ${hero.fatigue} fatigue damage!`);
         ui.render(this);
@@ -420,9 +435,14 @@ export class Game {
         }
         continue;
       }
-      card._justDrawn = true;
+      if (!silent) {
+        const handEl = document.getElementById(who === 'player' ? 'player-hand' : 'opp-hand');
+        await ui.animateCardFlight(handEl);
+      }
+      card._justDrawn = Date.now();
       hero.hand.push(card);
       if (!silent && who === 'player') this.log(`You draw ${card.name}.`);
+      if (!silent) ui.render(this);
     }
   }
 
@@ -431,7 +451,7 @@ export class Game {
   // freshly drawn card.
   async _chooseDiscard(drawnCard) {
     const hero = this.state.player;
-    drawnCard._justDrawn = true;
+    drawnCard._justDrawn = Date.now();
     hero.hand.push(drawnCard); // temporarily 8 cards
     ui.render(this);
     this.log(`You draw ${drawnCard.name} — but your hand is full!`);
@@ -469,7 +489,7 @@ export class Game {
       if (died.keywords.some((k) => k.name === 'Volatile') && s.phase !== 'game-over') {
         const roll = await this.roll(side, {
           notation: '1d6', label: `${died.name} — Volatile!`,
-          context: '5–6: deals that much to a random enemy', bestThreshold: 6,
+          context: '5–6: deals that much to a random enemy', bestThreshold: 5,
         });
         if (roll.total >= 5) {
           const enemySide = side === 'player' ? 'opponent' : 'player';
@@ -510,6 +530,10 @@ export class Game {
         this.log(`Board full — ${card.name} is discarded.`);
         ui.render(this);
         return;
+      }
+      if (who === 'opponent') {
+        // The card arcs in from the opponent's deck before landing.
+        await ui.animateCardFlight(document.getElementById('opp-board'), { durationMs: 650 });
       }
       const instance = createCreatureInstance(card);
       instance._justPlayed = Date.now();
@@ -860,7 +884,9 @@ export class Game {
     body.appendChild(flavour);
     const meta = document.createElement('div');
     meta.className = 'gameover-meta';
-    meta.textContent = `${s.turnNumber} turns  |  ${Math.max(0, s.player.hp)} HP remaining`;
+    meta.textContent =
+      `${s.turnNumber} turns  |  ${s.stats.dealt} damage dealt  |  `
+      + `${s.stats.taken} damage received  |  ${Math.max(0, s.player.hp)} HP remaining`;
     body.appendChild(meta);
 
     setTimeout(() => {
@@ -1002,7 +1028,10 @@ const SORCERY_HANDLERS = {
       t.currentHp -= 1;
       hits.set(t, (hits.get(t) || 0) + 1);
     }
-    for (const [t, d] of hits) ui.floatCreatureDamage(t.instanceId, d);
+    for (const [t, d] of hits) {
+      game.trackDamage(enemy, d);
+      ui.floatCreatureDamage(t.instanceId, d);
+    }
     game.log(`Chain Lightning: ${[...hits].map(([t, d]) => `${t.name} takes ${d}`).join(', ')}.`);
     ui.render(game);
   },
@@ -1183,9 +1212,13 @@ const SORCERY_HANDLERS = {
         hits.set(t, (hits.get(t) || 0) + 1);
       }
     }
-    for (const [t, d] of hits) ui.floatCreatureDamage(t.instanceId, d);
+    for (const [t, d] of hits) {
+      game.trackDamage(enemy, d);
+      ui.floatCreatureDamage(t.instanceId, d);
+    }
     if (heroHits > 0) {
       game.state[enemy].hp -= heroHits;
+      game.trackDamage(enemy, heroHits);
       ui.floatHeroDamage(enemy, heroHits);
     }
     const parts = [...hits].map(([t, d]) => `${t.name} takes ${d}`);

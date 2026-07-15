@@ -37,7 +37,7 @@ async function resolveDamageToCreature(game, target, targetSide, damage, sourceN
   }
 
   target.currentHp -= damage;
-  game.showCreatureDamage(target, damage);
+  game.showCreatureDamage(target, damage, targetSide);
   game.log(`${sourceName} hits ${target.name} for ${damage}.`);
   return damage;
 }
@@ -255,7 +255,7 @@ async function runPostHitTriggers(game, { attackerSide, attacker, target, target
   if (attacker.id === 'C031' && damage > 0) {
     const roll = await game.roll(attackerSide, {
       notation: '1d6', label: `${attacker.name} — blood drain`,
-      context: '4+: heal your hero that much', bestThreshold: 6,
+      context: '4+: heal your hero that much', bestThreshold: 4,
     });
     if (roll.total >= 4) {
       game.healHero(attackerSide, roll.total, attacker.name);

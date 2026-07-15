@@ -213,7 +213,10 @@ export function buildCardEl(card, { zone, justDrawn = false } = {}) {
   const div = el('div', `card rarity-${card.rarity} card-${card.type} zone-${zone}`);
   div.dataset.cardId = card.id;
   if (card.instanceId) div.dataset.instanceId = card.instanceId;
-  if (justDrawn && card.rarity === 'legendary') div.classList.add('just-drawn');
+  if (justDrawn) {
+    div.classList.add('drawn-in');
+    if (card.rarity === 'legendary') div.classList.add('just-drawn');
+  }
 
   const cost = el('div', 'card-cost', String(card.cost));
   div.appendChild(cost);
@@ -303,8 +306,10 @@ export function render(game) {
   const hand = document.getElementById('player-hand');
   hand.innerHTML = '';
   s.player.hand.forEach((card, i) => {
-    const cardEl = buildCardEl(card, { zone: 'hand', justDrawn: card._justDrawn });
-    delete card._justDrawn;
+    // _justDrawn is a timestamp; keep the draw-in animation alive across the
+    // render bursts that follow a draw.
+    const justDrawn = card._justDrawn && Date.now() - card._justDrawn < 700;
+    const cardEl = buildCardEl(card, { zone: 'hand', justDrawn });
     cardEl.dataset.handIndex = String(i);
     if (s.phase === 'player-turn') {
       cardEl.classList.add(card.cost <= s.player.mana ? 'playable' : 'unplayable');
@@ -560,7 +565,32 @@ export function animateDeath(instanceId) {
   clone.style.margin = '0';
   document.body.appendChild(clone);
   src.style.visibility = 'hidden';
-  setTimeout(() => clone.remove(), 750);
+  setTimeout(() => clone.remove(), 1800);
+}
+
+// Flies a face-down card from off-screen right (the "deck") to the target
+// element in a shallow arc. Resolves when it lands.
+export function animateCardFlight(targetEl, { durationMs = 550 } = {}) {
+  if (!targetEl) return Promise.resolve();
+  const t = targetEl.getBoundingClientRect();
+  const fly = buildCardBack();
+  fly.classList.add('card-flight');
+  document.body.appendChild(fly);
+  const fr = fly.getBoundingClientRect();
+  const startX = window.innerWidth + 40;
+  const endX = t.left + t.width / 2 - fr.width / 2;
+  const endY = t.top + t.height / 2 - fr.height / 2;
+  const startY = endY - 40;
+  const anim = fly.animate([
+    { transform: `translate(${startX}px, ${startY}px) rotate(22deg)`, opacity: 1 },
+    { transform: `translate(${(startX + endX) / 2}px, ${Math.min(startY, endY) - 90}px) rotate(-8deg)`, offset: 0.55 },
+    { transform: `translate(${endX}px, ${endY}px) rotate(0deg)`, opacity: 0.85 },
+  ], { duration: durationMs, easing: 'ease-out' });
+  return new Promise((resolve) => {
+    const done = () => { fly.remove(); resolve(); };
+    anim.onfinish = done;
+    setTimeout(done, durationMs + 250); // safety net
+  });
 }
 
 // ── Attack arcs ──────────────────────────────────────────────────────────────
