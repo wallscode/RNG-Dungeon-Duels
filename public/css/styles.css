@@ -1095,6 +1095,15 @@ button { font-family: inherit; cursor: pointer; }
   transform: translateX(-50%);
 }
 
+/* Spent spell card fades out like a dying creature (opacity/filter only —
+   transform is load-bearing for pin positioning). */
+#active-card-pin.fading { animation: spellFade 750ms ease-in forwards; }
+
+@keyframes spellFade {
+  0% { opacity: 1; filter: none; }
+  100% { opacity: 0; filter: grayscale(1) brightness(0.45); }
+}
+
 .pin-label {
   font-size: 11px;
   font-weight: 700;

@@ -9,8 +9,8 @@ export const PERSONALITIES = {
   Gambler:   { aggression: 1.1, gambleBoldness: 1.8, focusThreshold: 1.0, facePriority: 1.0, noise: 0.35 },
 };
 
-const PAUSE_BETWEEN_PLAYS_MS = 1600;
-const PAUSE_BETWEEN_ATTACKS_MS = 1800;
+const PAUSE_BETWEEN_PLAYS_MS = 2000;
+const PAUSE_BETWEEN_ATTACKS_MS = 2200;
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 

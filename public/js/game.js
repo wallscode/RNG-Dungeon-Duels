@@ -397,6 +397,21 @@ export class Game {
     ui.floatCreatureDamage(creature.instanceId, dmg);
   }
 
+  // Arc from the pinned spell card to its target ('hero' resolves against
+  // receiverSide). Colors follow the spell-school palette.
+  spellArc(target, receiverSide, color = '#c050d0') {
+    const from = document.querySelector('#active-card-pin .card');
+    let to;
+    if (target === 'hero') {
+      to = receiverSide === 'opponent'
+        ? document.getElementById('opp-portrait')
+        : document.getElementById('player-hp-fill')?.parentElement;
+    } else if (target?.instanceId) {
+      to = document.querySelector(`[data-instance-id="${target.instanceId}"]`);
+    }
+    ui.drawAttackArc(from, to, color, 900);
+  }
+
   healHero(side, amount, source = '') {
     const hero = this.state[side];
     const healed = Math.min(HP_MAX, hero.hp + amount) - hero.hp;
@@ -586,18 +601,22 @@ export class Game {
     ui.setActiveCard(card, who === 'player' ? 'You Cast' : 'Opponent Casts', who);
     ui.render(this);
 
+    let fizzled = false;
     try {
       const handler = SORCERY_HANDLERS[card.id];
       if (handler) await handler(this, who, card);
     } catch (err) {
       if (err === CANCELLED) {
+        fizzled = true;
         this.log(`${card.name} fizzles!`); // mana stays spent
       } else {
         throw err;
       }
     } finally {
       hero.discard.push(card);
-      ui.clearActiveCard();
+      // Let the spell's final impact read before the card fades away.
+      await sleep(fizzled ? 350 : 1000);
+      await ui.fadeOutActiveCard();
       ui.hideSorceryPrompt();
       ui.clearTargetHighlights();
     }
@@ -923,6 +942,12 @@ export class Game {
 
 function enemyOf(who) { return who === 'player' ? 'opponent' : 'player'; }
 
+// Arc from the pinned card to the target, then pause so the hit reads.
+async function spellImpact(game, target, receiverSide, color, pauseMs = 650) {
+  game.spellArc(target, receiverSide, color);
+  await sleep(pauseMs);
+}
+
 async function damageSorceryRoll(game, who, card, notation, context) {
   const roll = await game.roll(who, { notation, label: `${card.name}!`, context, aiRerollable: true });
   let dmg = roll.total;
@@ -933,8 +958,9 @@ async function damageSorceryRoll(game, who, card, notation, context) {
   return { dmg, roll };
 }
 
-async function dealSorceryDamage(game, who, card, target, dmg) {
+async function dealSorceryDamage(game, who, card, target, dmg, color = '#ff6020') {
   const enemy = enemyOf(who);
+  await spellImpact(game, target, enemy, color);
   if (target === 'hero') {
     game.dealToHero(enemy, dmg, { source: card.name});
     game.log(`${card.name} hits ${enemy === 'opponent' ? 'the enemy' : 'your'} hero for ${dmg}.`);
@@ -980,6 +1006,7 @@ const SORCERY_HANDLERS = {
     const targets = game.state[enemy].board.filter((c) => c.currentHp > 0);
     if (targets.length === 0) { game.log(`${card.name} finds no target.`); return; }
     const t = targets[Math.floor(Math.random() * targets.length)];
+    await spellImpact(game, t, enemy, '#a070e0');
     t.tempDamageMalus = 2;
     game.log(`${t.name} is hexed — -2 damage on its next attack.`);
   },
@@ -994,6 +1021,7 @@ const SORCERY_HANDLERS = {
   // Healing Word — restore 2d4 HP to your hero.
   S006: async (game, who, card) => {
     const roll = await game.roll(who, { notation: '2d4', label: 'Healing Word', context: 'Restore HP to your hero' });
+    await spellImpact(game, 'hero', who, '#40c060');
     game.healHero(who, roll.total, card.name);
   },
 
@@ -1010,6 +1038,7 @@ const SORCERY_HANDLERS = {
   // Blessing — target friendly creature deals +2 on its next attack this turn.
   S008: async (game, who, card) => {
     const t = await game.chooseFriendlyCreature(who, 'Blessing — choose a friendly creature');
+    await spellImpact(game, t, who, '#f0c040');
     t.tempDamageBonus += 2;
     game.log(`${t.name} is blessed: +2 damage on its next attack this turn.`);
   },
@@ -1029,9 +1058,11 @@ const SORCERY_HANDLERS = {
       hits.set(t, (hits.get(t) || 0) + 1);
     }
     for (const [t, d] of hits) {
+      game.spellArc(t, enemy, '#80d0ff');
       game.trackDamage(enemy, d);
       ui.floatCreatureDamage(t.instanceId, d);
     }
+    await sleep(800);
     game.log(`Chain Lightning: ${[...hits].map(([t, d]) => `${t.name} takes ${d}`).join(', ')}.`);
     ui.render(game);
   },
@@ -1044,9 +1075,11 @@ const SORCERY_HANDLERS = {
     });
     if (roll.total >= 4) {
       const bonus = await game.roll(who, { notation: '1d8', label: 'Brew surge!', context: `Bonus damage for ${t.name}` });
+      await spellImpact(game, t, who, '#f0c040');
       t.tempDamageBonus += bonus.total;
       game.log(`${t.name} rages: +${bonus.total} on its next attack.`);
     } else {
+      await spellImpact(game, t, who, '#ff4020');
       game.dealToCreature(t, who, 2, { source: card.name });
       game.log(`The brew backfires — ${t.name} takes 2.`);
     }
@@ -1057,9 +1090,10 @@ const SORCERY_HANDLERS = {
     const roll = await game.roll(who, {
       notation: '1d6', label: 'Mend the Ranks', context: 'All friendly creatures gain that much HP', bestThreshold: 6,
     });
-    for (const c of game.state[who].board.filter((x) => x.currentHp > 0)) {
-      c.currentHp += roll.total;
-    }
+    const mended = game.state[who].board.filter((x) => x.currentHp > 0);
+    for (const c of mended) game.spellArc(c, who, '#40c060');
+    if (mended.length > 0) await sleep(700);
+    for (const c of mended) c.currentHp += roll.total;
     game.log(`Friendly creatures mend ${roll.total} HP.`);
   },
 
@@ -1069,6 +1103,7 @@ const SORCERY_HANDLERS = {
       notation: '1d6', label: 'Sap Strength', context: '5–6: -2 enemy mana · 1–4: -1', bestThreshold: 5,
     });
     const amount = roll.total >= 5 ? 2 : 1;
+    await spellImpact(game, 'hero', enemyOf(who), '#a070e0');
     queuePendingEffect({ type: 'mana_loss', side: enemyOf(who), amount });
     game.log(`The enemy will lose ${amount} mana next turn.`);
   },
@@ -1087,6 +1122,7 @@ const SORCERY_HANDLERS = {
     if (targets.length === 0) { game.log(`${card.name} frosts an empty field.`); return; }
     const { dmg } = await damageSorceryRoll(game, who, card, '1d4', 'Deal to all enemy creatures');
     for (const t of targets) {
+      await spellImpact(game, t, enemy, '#80d0ff', 350);
       game.dealToCreature(t, enemy, dmg, { source: card.name});
       if (t.currentHp > 0) {
         const freeze = await game.roll(who, {
@@ -1121,11 +1157,13 @@ const SORCERY_HANDLERS = {
       const own = game.state[who].board.filter((c) => c.currentHp > 0);
       if (own.length === 0) { game.log('The polymorph fizzles — no creature to transform.'); return; }
       const t = own[Math.floor(Math.random() * own.length)];
+      await spellImpact(game, t, who, '#a070e0');
       makeSheep(t);
       game.log(`Disaster! Your own ${t.name === 'Sheep' ? 'creature' : t.name} becomes a 1/1 Sheep.`);
     } else {
       const t = await game.chooseEnemyCreature(who, 'Polymorph — choose an enemy creature');
       const name = t.name;
+      await spellImpact(game, t, enemyOf(who), '#a070e0');
       makeSheep(t);
       game.log(`${name} becomes a 1/1 Sheep!`);
     }
@@ -1135,6 +1173,7 @@ const SORCERY_HANDLERS = {
   // Second Wind — restore 2d6 HP and draw a card.
   S016: async (game, who, card) => {
     const roll = await game.roll(who, { notation: '2d6', label: 'Second Wind', context: 'Restore HP + draw a card' });
+    await spellImpact(game, 'hero', who, '#40c060');
     game.healHero(who, roll.total, card.name);
     await game._drawCards(who, 1);
   },
@@ -1183,6 +1222,7 @@ const SORCERY_HANDLERS = {
     const [a, b] = roll.rolls;
     if (a === 6 && b === 6) {
       game.critFanfare(who, 'Twin Fates CRITICAL!');
+      await spellImpact(game, 'hero', enemyOf(who), '#c050d0');
       game.dealToHero(enemyOf(who), roll.total * 2, { source: card.name});
       await game._drawCards(who, 2);
       game.log(`Twin sixes! ${roll.total * 2} damage AND 2 cards.`);
@@ -1190,6 +1230,7 @@ const SORCERY_HANDLERS = {
       await game._drawCards(who, 2);
       game.log(`Doubles (${a}s) — draw 2 cards instead of damage.`);
     } else {
+      await spellImpact(game, 'hero', enemyOf(who), '#c050d0');
       game.dealToHero(enemyOf(who), roll.total, { source: card.name});
       game.log(`Twin Fates strikes the enemy hero for ${roll.total}.`);
     }
@@ -1213,8 +1254,14 @@ const SORCERY_HANDLERS = {
       }
     }
     for (const [t, d] of hits) {
+      game.spellArc(t, enemy, '#ff6020');
       game.trackDamage(enemy, d);
       ui.floatCreatureDamage(t.instanceId, d);
+    }
+    if (hits.size > 0) await sleep(700);
+    if (heroHits > 0) {
+      game.spellArc('hero', enemy, '#ff6020');
+      await sleep(500);
     }
     if (heroHits > 0) {
       game.state[enemy].hp -= heroHits;
@@ -1265,6 +1312,8 @@ const SORCERY_HANDLERS = {
     const targets = game.state[enemy].board.filter((c) => c.currentHp > 0);
     if (targets.length > 0) {
       const { dmg } = await damageSorceryRoll(game, who, card, '3d8', 'Deal to ALL enemy creatures');
+      for (const t of targets) game.spellArc(t, enemy, '#ff6020');
+      await sleep(700);
       for (const t of targets) {
         game.dealToCreature(t, enemy, dmg, { source: card.name});
       }

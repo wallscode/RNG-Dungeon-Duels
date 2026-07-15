@@ -210,7 +210,8 @@ export async function rollDice(opts) {
 
   const isCrit = isCritRoll(notation, result.rolls);
   if (isCrit && opts.onCrit) opts.onCrit(result);
-  await sleep(SETTLE_PAUSE_MS);
+  // AI rolls linger longer so the player can absorb what just happened.
+  await sleep(isAI ? 1300 : SETTLE_PAUSE_MS);
   closeStage();
   return { rolls: result.rolls.slice(), total: result.total, isCrit, notation, rerolled, usedLucky, usedFocus };
 }

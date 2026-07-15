@@ -522,8 +522,19 @@ export function setActiveCard(card, label, side = 'player') {
 
 export function clearActiveCard() {
   const pin = document.getElementById('active-card-pin');
-  pin.classList.remove('visible', 'opp-cast');
+  pin.classList.remove('visible', 'opp-cast', 'fading');
   pin.innerHTML = '';
+}
+
+// Fades the pinned spell card out (like a creature death) instead of
+// snapping it away. Resolves when gone.
+export function fadeOutActiveCard() {
+  const pin = document.getElementById('active-card-pin');
+  if (!pin.classList.contains('visible')) return Promise.resolve();
+  pin.classList.add('fading');
+  return new Promise((resolve) => {
+    setTimeout(() => { clearActiveCard(); resolve(); }, 750);
+  });
 }
 
 // ── Damage floats & death animation ──────────────────────────────────────────
